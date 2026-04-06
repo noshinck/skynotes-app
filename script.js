@@ -52,23 +52,26 @@ document.getElementById('add-note').onclick = () => {
 
 /**
  * Injects Note into DOM and initializes GSAP Draggable
+ * FIXED: Added Drag Handle to allow textarea typing
  */
 function createNoteUI(note) {
     const div = document.createElement('div');
     div.id = `note-${note.id}`;
-    div.className = 'note glass p-5 rounded-[1.5rem]';
+    // flex-col ensures the header and textarea are stacked properly
+    div.className = 'note glass p-5 rounded-[1.5rem] flex flex-col';
     div.style.backgroundColor = note.color;
     
-    // Position using GSAP for smoother initial placement
+    // Position using GSAP
     gsap.set(div, { x: note.x, y: note.y });
 
+    // THE FIX: Added 'drag-handle' class and cursor-move to the header
     div.innerHTML = `
-        <div class="flex justify-between items-center mb-3 opacity-30 hover:opacity-100 transition-opacity cursor-default">
-            <span class="text-[10px] font-bold tracking-widest uppercase text-sky-900">Sticky</span>
-            <button onclick="deleteNote(${note.id})" class="text-rose-500 hover:scale-125 transition-transform">✕</button>
+        <div class="drag-handle flex justify-between items-center mb-3 opacity-30 hover:opacity-100 transition-opacity cursor-move">
+            <span class="text-[10px] font-bold tracking-widest uppercase text-sky-900 pointer-events-none">Member of Sky</span>
+            <button onclick="deleteNote(${note.id})" class="text-rose-500 hover:scale-125 transition-transform p-1">✕</button>
         </div>
         <textarea oninput="updateNoteText(${note.id}, this.value)" 
-            class="bg-transparent w-full h-32 resize-none outline-none text-sky-900 font-medium leading-relaxed"
+            class="bg-transparent w-full h-32 resize-none outline-none text-sky-900 font-medium leading-relaxed pointer-events-auto"
             placeholder="Type a thought...">${note.content}</textarea>
     `;
 
@@ -77,9 +80,11 @@ function createNoteUI(note) {
     // Entrance Animation
     gsap.from(div, { scale: 0.4, opacity: 0, duration: 0.5, ease: "back.out(1.7)" });
 
-    // Enable Dragging
+    // Enable Dragging with TRIGGER fix
     Draggable.create(div, {
         bounds: canvas,
+        // ONLY allow dragging from the header area so the textarea stays clickable
+        trigger: div.querySelector(".drag-handle"), 
         onDragEnd: function() {
             const targetNote = notes.find(n => n.id === note.id);
             if (targetNote) {
@@ -101,7 +106,8 @@ window.deleteNote = (id) => {
         duration: 0.3, 
         onComplete: () => {
             notes = notes.filter(n => n.id !== id);
-            document.getElementById(`note-${id}`).remove();
+            const element = document.getElementById(`note-${id}`);
+            if (element) element.remove();
             saveData();
         }
     });
@@ -136,7 +142,7 @@ function renderTasks() {
                     class="w-5 h-5 accent-sky-400 cursor-pointer">
                 <span class="${t.done ? 'line-through opacity-40' : 'font-medium'} text-sky-800">${t.text}</span>
             </div>
-            <button onclick="deleteTask(${t.id})" class="text-rose-300 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+            <button onclick="deleteTask(${t.id})" class="text-rose-300 opacity-0 group-hover:opacity-100 transition-opacity p-1">✕</button>
         </li>
     `).join('');
 }
@@ -160,6 +166,8 @@ let calcExpression = "0";
 function initCalculator() {
     const grid = document.getElementById('calc-grid');
     const display = document.getElementById('calc-display');
+    if (!grid || !display) return;
+
     const buttons = [
         'C', '(', ')', '/', 
         '7', '8', '9', '*', 
@@ -184,7 +192,6 @@ function initCalculator() {
         }
         else if (val === '=') {
             try { 
-                // Using Function instead of eval for a slightly safer calculation
                 calcExpression = String(new Function(`return ${calcExpression}`)()); 
             } catch { calcExpression = "Error"; }
         } else {
