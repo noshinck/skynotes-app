@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyNotes ☁️</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/Draggable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%);
+            height: 100vh;
+            overflow: hidden;
+            color: #0369a1;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+
+        .note {
+            width: 240px;
+            min-height: 220px;
+            position: absolute;
+            cursor: grab;
+            z-index: 10;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+        }
+
+        .note:active { cursor: grabbing; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #bae6fd; border-radius: 10px; }
+
+        .calc-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .calc-btn:active { transform: scale(0.92); }
+    </style>
+</head>
+<body class="p-6 md:p-8">
+
+    <header class="flex justify-between items-center mb-8 relative z-50">
+        <div class="flex items-center gap-3">
+            <span class="text-4xl">☁️</span>
+            <h1 class="text-3xl font-bold tracking-tight text-sky-600">SkyNotes</h1>
+        </div>
+        <button id="add-note" class="bg-sky-400 hover:bg-sky-500 text-white font-bold px-8 py-3 rounded-full shadow-lg shadow-sky-200 transition-all hover:-translate-y-1 active:translate-y-0">
+            ✨ New Note
+        </button>
+    </header>
+
+    <main class="flex h-[calc(100vh-160px)] gap-8">
+        <div id="canvas" class="flex-1 relative rounded-[2rem] border-2 border-dashed border-sky-200/50 overflow-hidden">
+            </div>
+
+        <aside class="w-80 flex flex-col gap-6 h-full">
+            
+            <section class="glass p-6 rounded-[2rem] flex flex-col flex-1 min-h-0">
+                <h2 class="text-lg font-bold mb-4 flex items-center gap-2">📝 Tasks</h2>
+                <div class="flex gap-2 mb-4">
+                    <input type="text" id="todo-input" placeholder="Plan something..." 
+                        class="w-full bg-white/50 px-4 py-2 rounded-xl border-none outline-none focus:ring-2 focus:ring-sky-300 transition-all text-sky-900">
+                    <button id="add-todo" class="bg-sky-400 text-white px-4 rounded-xl font-bold hover:bg-sky-500">+</button>
+                </div>
+                <ul id="todo-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></ul>
+            </section>
+
+            <section class="glass p-5 rounded-[2rem]">
+                <div id="calc-display" class="bg-white/40 p-4 text-right text-2xl font-bold text-sky-900 rounded-2xl mb-4 h-16 flex items-center justify-end overflow-hidden">0</div>
+                <div class="grid grid-cols-4 gap-2" id="calc-grid">
+                    </div>
+            </section>
+
+        </aside>
+    </main>
+
+    <script>
+        gsap.registerPlugin(Draggable);
+
+        // --- State Management ---
+        let notes = JSON.parse(localStorage.getItem('skynotes_data')) || [];
+        let tasks = JSON.parse(localStorage.getItem('skytasks_data')) || [];
+        const colors = ['#fef3c7', '#dcfce7', '#e0f2fe', '#fce7f3', '#f3e8ff'];
+
+        // --- Init ---
+        window.addEventListener('DOMContentLoaded', () => {
+            // Entrance Animations
+            gsap.from("header", { y: -50, opacity: 0, duration: 1.2, ease: "expo.out" });
+            gsap.from("aside", { x: 50, opacity: 0, duration: 1.2, delay: 0.2, ease: "expo.out" });
+            gsap.from("#canvas", { scale: 0.95, opacity: 0, duration: 1.5, delay: 0.1, ease: "expo.out" });
+
+            renderNotes();
+            renderTasks();
+            initCalculator();
+        });
+
+        // --- Notes Module ---
+        function renderNotes() {
+            const canvas = document.getElementById('canvas');
+            canvas.innerHTML = '';
+            notes.forEach(note => createNoteUI(note));
+        }
+
+        function createNoteUI(note) {
+            const div = document.createElement('div');
+            div.id = `note-${note.id}`;
+            div.className = 'note glass p-5 rounded-[1.5rem]';
+            div.style.backgroundColor = note.color;
+            div.style.left = `${note.x}px`;
+            div.style.top = `${note.y}px`;
+
+            div.innerHTML = `
+                <div class="flex justify-between items-center mb-3 opacity-30 hover:opacity-100 transition-opacity">
+                    <span class="text-[10px] font-bold tracking-widest uppercase">Member of Sky</span>
+                    <button onclick="deleteNote(${note.id})" class="text-rose-500 font-bold p-1">✕</button>
+                </div>
+                <textarea oninput="updateNoteText(${note.id}, this.value)" 
+                    class="bg-transparent w-full h-32 resize-none outline-none text-sky-900 font-medium leading-relaxed placeholder:text-sky-300"
+                    placeholder="Deep thoughts...">${note.content}</textarea>
+            `;
+
+            document.getElementById('canvas').appendChild(div);
+
+            // Pop-in effect
+            gsap.from(div, { scale: 0, opacity: 0, duration: 0.6, ease: "back.out(1.7)" });
+
+            // Draggable behavior
+            Draggable.create(div, {
+                bounds: "#canvas",
+                inertia: true,
+                onDragEnd: function() {
+                    const index = notes.findIndex(n => n.id === note.id);
+                    notes[index].x = this.x;
+                    notes[index].y = this.y;
+                    save();
+                }
+            });
+        }
+
+        document.getElementById('add-note').onclick = () => {
+            const newNote = {
+                id: Date.now(),
+                x: 40 + Math.random() * 100,
+                y: 40 + Math.random() * 100,
+                content: "",
+                color: colors[Math.floor(Math.random() * colors.length)]
+            };
+            notes.push(newNote);
+            createNoteUI(newNote);
+            save();
+        };
+
+        window.deleteNote = (id) => {
+            gsap.to(`#note-${id}`, { scale: 0, opacity: 0, duration: 0.4, ease: "back.in(1.7)", onComplete: () => {
+                notes = notes.filter(n => n.id !== id);
+                document.getElementById(`note-${id}`).remove();
+                save();
+            }});
+        };
+
+        window.updateNoteText = (id, text) => {
+            const note = notes.find(n => n.id === id);
+            if (note) note.content = text;
+            save();
+        };
+
+        // --- Tasks Module ---
+        document.getElementById('add-todo').onclick = () => {
+            const input = document.getElementById('todo-input');
+            if (!input.value.trim()) return;
+            const task = { id: Date.now(), text: input.value, done: false };
+            tasks.push(task);
+            input.value = '';
+            renderTasks();
+            save();
+        };
+
+        function renderTasks() {
+            const list = document.getElementById('todo-list');
+            list.innerHTML = tasks.map(t => `
+                <li class="flex items-center justify-between bg-white/40 p-3 rounded-2xl group transition-all hover:bg-white/70">
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${t.id})" 
+                            class="w-5 h-5 rounded-lg accent-sky-400 border-none">
+                        <span class="${t.done ? 'line-through opacity-40' : 'font-medium'} text-sky-800">${t.text}</span>
+                    </div>
+                    <button onclick="deleteTask(${t.id})" class="text-rose-300 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+                </li>
+            `).join('');
+        }
+
+        window.toggleTask = (id) => {
+            const task = tasks.find(t => t.id === id);
+            if (task) task.done = !task.done;
+            renderTasks();
+            save();
+        };
+
+        window.deleteTask = (id) => {
+            tasks = tasks.filter(t => t.id !== id);
+            renderTasks();
+            save();
+        };
+
+        // --- Calculator Module ---
+        function initCalculator() {
+            const grid = document.getElementById('calc-grid');
+            const display = document.getElementById('calc-display');
+            const btns = ['C', '(', ')', '/', '7', '8', '9', '*', '4', '5', '6', '-', '1', '2', '3', '+', '0', '.', 'DEL', '='];
+            let current = "0";
+
+            grid.innerHTML = btns.map(b => {
+                let colorClass = "bg-white/50 text-sky-700";
+                if (b === '=') colorClass = "bg-sky-400 text-white col-span-1";
+                if (b === 'C') colorClass = "bg-rose-100 text-rose-500";
+                return `<button class="calc-btn ${colorClass} h-12 rounded-xl font-bold shadow-sm" onclick="handleCalc('${b}')">${b}</button>`;
+            }).join('');
+
+            window.handleCalc = (val) => {
+                if (val === 'C') current = "0";
+                else if (val === 'DEL') current = current.length > 1 ? current.slice(0, -1) : "0";
+                else if (val === '=') {
+                    try { current = eval(current).toString(); } catch { current = "Error"; }
+                } else {
+                    current === "0" ? current = val : current += val;
+                }
+                display.innerText = current;
+            };
+        }
+
+        // --- Storage ---
+        function save() {
+            localStorage.setItem('skynotes_data', JSON.stringify(notes));
+            localStorage.setItem('skytasks_data', JSON.stringify(tasks));
+        }
+
+    </script>
+</body>
+</html>
